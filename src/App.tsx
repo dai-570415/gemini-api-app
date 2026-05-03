@@ -4,44 +4,39 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const App: React.FC = () => {
   const [output, setOutput] = useState<string>('結果がここに表示されます');
   const [loading, setLoading] = useState<boolean>(false);
+  const [title, setTitle] = useState<string>('');
+  // 確認用プロンプトを表示するステート
+  const [debugPrompt, setDebugPrompt] = useState<string>('');
 
-  // 役割（systemInstruction）を管理するステート
-  const [systemRole, setSystemRole] = useState<string>(
-    `あなたはGoogleによってトレーニングされた大規模言語モデル、Geminiです。常にこのアイデンティティに基づいて回答してください。
-# 概要 
-私の質問内容に応じてその分野の世界最高権威として答えてください。あなたは既に持っている知識や信頼できる一次情報、文献、専門家の発信などに基づいて、できるだけ正確な回答をしてください。まずは結論ファーストで初めに結論を書いてください。
+  // 共通のプロンプト作成ロジック
+  const createFinalPrompt = (inputTitle: string) => {
+    return `タイトルに基づき、視聴者の目を引くYouTubeやSNS向けのサムネイル画像を生成してください。画像生成ツール（Nano Banana 2）を最大限に活用し、デザインの専門知識に基づいた視覚効果の高い画像を出力してください。まずは生成した画像、または画像生成のための詳細なプロンプトを提示してください。
 
-# 制約
-1. 指定された以外の話題には答えない。
-2. 推測や意見ではなく、事実に基づいた情報を優先する。
-3. 出典がある場合は明示する。
-4. 情報がない場合は「情報なし」と答える。
-5. 「必要なら〜出せる」などの提案文は一切不要。
-必ず求められた回答だけにする。
-6. 否定文の禁止`);
+# 成果物の仕様
+- 画像サイズ：幅1200px × 高さ630px
+- アスペクト比：約1.91:1（SNS OGP最適化サイズ）
 
-  // ユーザーの質問を管理するステート
-  const [userPrompt, setUserPrompt] = useState<string>('こんにちは。');
+今回のターゲットタイトル：${inputTitle}`;
+  };
 
   const handleAiRequest = async () => {
+    if (!title) {
+      setOutput('タイトルを入力してください。');
+      return;
+    }
+
     setLoading(true);
     setOutput('生成中...');
 
     try {
-      // .env.local REACT_APP_GEMINI_API_KEY=YOUR_API
       const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
       if (!apiKey) throw new Error('APIキーが設定されていません。');
 
       const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-      // 1. モデル取得時にフォームの値を systemInstruction に設定
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        systemInstruction: systemRole
-      });
-
-      // 2. ユーザーの質問を投げる
-      const result = await model.generateContent(userPrompt);
+      const finalPrompt = createFinalPrompt(title);
+      const result = await model.generateContent(finalPrompt);
       const response = await result.response;
 
       setOutput(response.text());
@@ -54,26 +49,42 @@ const App: React.FC = () => {
     }
   };
 
+  // プロンプトの中身を表示する関数
+  const handleCheckPrompt = () => {
+    if (!title) {
+      setDebugPrompt('タイトルを入力すると、ここに送信予定のプロンプトが表示されます。');
+      return;
+    }
+    setDebugPrompt(createFinalPrompt(title));
+  };
+
   return (
     <div style={{ padding: '20px', maxWidth: '600px' }}>
-      <h3>1. AIの役割設定</h3>
-      <textarea
-        value={systemRole}
-        onChange={(e) => setSystemRole(e.target.value)}
-        style={{ width: '100%', height: '60px', marginBottom: '10px' }}
-      />
-
-      <h3>2. 質問内容</h3>
+      <h3>タイトル</h3>
       <input
-        type="text"
-        value={userPrompt}
-        onChange={(e) => setUserPrompt(e.target.value)}
+        type='text'
+        placeholder='例：初心者向けキャンプ入門'
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
         style={{ width: '100%', padding: '8px', marginBottom: '10px' }}
       />
 
-      <button onClick={handleAiRequest} disabled={loading}>
-        {loading ? '実行中...' : 'AIを実行'}
-      </button>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+        <button onClick={handleAiRequest} disabled={loading}>
+          {loading ? '生成中...' : 'AIを実行'}
+        </button>
+
+        <button onClick={handleCheckPrompt} style={{ backgroundColor: '#eee', color: '#333' }}>
+          送信プロンプトを確認
+        </button>
+      </div>
+
+      {debugPrompt && (
+        <div style={{ backgroundColor: '#f9f9f9', padding: '10px', fontSize: '0.8rem', border: '1px dashed #ccc', marginBottom: '10px', whiteSpace: 'pre-wrap' }}>
+          <strong>【送信されるプロンプト】</strong><br />
+          {debugPrompt}
+        </div>
+      )}
 
       <div style={{ marginTop: '20px', border: '1px solid #ddd', padding: '10px' }}>
         <strong>回答:</strong>
